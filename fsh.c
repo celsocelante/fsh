@@ -5,56 +5,97 @@
 #include <errno.h>
 #include <signal.h>
 
-#define SIZE_IN 1024
 #define MAX_WORDS 10
+#define SIZE_IN 1024
+#define DELIMS " \t\r\n"
+#define DELIM_F " @ "
 
-char input[SIZE_IN] = {'\0'};
+char* escape_white(char* str){
+	while(isspace(str))
+		str++;
 
-void getText(char *string){
-	printf("fsh> ");
-	fgets(string, sizeof(char)*SIZE_IN, stdin);
-	sscanf(string, "%[^\n]", string);
+	return str;
 }
 
-int main(){
-	int count = 0;
-	int i;
-	char *buffer, *words[MAX_WORDS], *ptrTok;
-	char cwd[SIZE_IN];
+void cd_command(void){
 
-	getcwd(cwd, sizeof(cwd));
+	char *arg = strtok(NULL, DELIMS);
+	if (!arg)
+		printf("cd: Argument is mandatory\n");
+
+	else 
+		if (chdir(arg))
+			printf("cd: The directory \"%s\" does not exist\n",arg);
+}
+
+void pwd_command(void){
+	char cwd[1024];
+   	if (getcwd(cwd, sizeof(cwd)) != NULL)
+    	printf("pwd: %s\n", cwd);
+	else
+    	printf("pwd: Cannot get current directory\n");
+}
+
+void waita_command(void){
+}
+
+void exit_command(void){
+	exit(0);
+}
+
+void exec_children(int n){
+	int i, pid_manager;
+
+	int pid = fork(); // cria processo gerente
+
+	if(pid == 0){ // no caso do gerente
+		pid_manager = getpid();
+		
+		for(i = 0; i < 5; i++){
+			if(getpid() == pid_manager){
+				if(fork() == 0){
+					// código específico de cada filho
+					//printf("Hello, I'm the child number %d, my PID is %d and my father's PID is %d\n",i+1,getpid(),getppid());
+					execl("/bin/ls", "ls", NULL);
+					//for(;;);
+				}
+			}
+		}
+		// execução do processo gerente
+		wait();
+	}
+}
+
+int main(void){
+	int count = 0, i;
+
+	char *cmd;
+  	char line[SIZE_IN];
+  	char command[SIZE_IN];
 
 	while(1){
-		// Texto de espera de entrada do fsh
-		getText(input);
+		printf("fsh> ");
+		if (!fgets(line, SIZE_IN, stdin))
+			exit(1);
 
-		// Operações internas da shell
-		if(strcmp(input,"cd") == 0){
+		strcpy(command,line);
 
-		} else if(strcmp(input,"pwd") == 0){
-			printf("%s\n",cwd);
-		} else if(strcmp(input,"waita") == 0){
+	    // Parse and execute command
+	    if ((cmd = strtok(line, DELIMS))) {
 
-		} else if(strcmp(input,"exit") == 0){
-			return 0;
-		} else {
-			buffer = strdup(input);
-		    if (!buffer)
-		    	return 1;
+			if (strcmp(cmd, "cd") == 0) {
+				cd_command();
+			} else if(strcmp(cmd,"pwd") == 0){
+		   		pwd_command();
+		   	} else if(strcmp(cmd,"waita") == 0){
+		   		waita_command();
+		   	} else if (strcmp(cmd, "exit") == 0) {
+		    	exit_command();
+		   	} else {
+		   		exec_children(5);
+		   	}
+	    }
 
-		    while((ptrTok = strsep(&buffer, " ")) && count < MAX_WORDS)
-	    		words[count++] = ptrTok;
-
-		    // imprime todos os comandos de entrada
-		    for (i = 0; i < count; i++)
-		    	printf("%s\n", words[i]);
-
-		    // Zera o contador de comandos separados por '@'
-		    count = 0;
-
-		    free(buffer);
-		}
-		
 	}
 	return 0;
 }
