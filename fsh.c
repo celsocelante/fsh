@@ -5,29 +5,31 @@
 #include <errno.h>
 #include <signal.h>
 
+// Número máximo de programas divididos por '@'
 #define MAX_WORDS 10
+// Tamanho máximo da linha a ser lida na shell
 #define SIZE_IN 1024
 #define DELIMS " \t\r\n"
 #define DELIM_F " @ "
 
-char* escape_white(char* str){
-	while(isspace(str))
-		str++;
-
-	return str;
+// Função que trata o sinal TSTP
+void trata_SIGTSTP(int signal){
+	printf("Nao adianta tentar suspender... minha familia de processos esta protegida!\n");
 }
 
+// Função responsável pelo comando 'cd'
 void cd_command(void){
 
 	char *arg = strtok(NULL, DELIMS);
 	if (!arg)
-		printf("cd: Argument is mandatory\n");
+		printf("cd: Argument is required\n");
 
 	else 
 		if (chdir(arg))
 			printf("cd: The directory \"%s\" does not exist\n",arg);
 }
 
+// Função responsável pelo comando 'pwd'
 void pwd_command(void){
 	char cwd[1024];
    	if (getcwd(cwd, sizeof(cwd)) != NULL)
@@ -36,14 +38,18 @@ void pwd_command(void){
     	printf("pwd: Cannot get current directory\n");
 }
 
+// Função responsável pelo comando 'waita'
 void waita_command(void){
+	// faz nada
 }
 
+// Função responsável pelo comando 'exit'
 void exit_command(void){
 	exit(0);
 }
 
-void exec_children(int n){
+// Função experimental que cria n filhos e um processo gerente
+void exec_children(int n, char* comandos){
 	int i, pid_manager;
 
 	int pid = fork(); // cria processo gerente
@@ -51,18 +57,19 @@ void exec_children(int n){
 	if(pid == 0){ // no caso do gerente
 		pid_manager = getpid();
 		
-		for(i = 0; i < 5; i++){
+		for(i = 0; i < n; i++){ // iteração para criar n filhos
 			if(getpid() == pid_manager){
-				if(fork() == 0){
-					// código específico de cada filho
-					//printf("Hello, I'm the child number %d, my PID is %d and my father's PID is %d\n",i+1,getpid(),getppid());
-					execl("/bin/ls", "ls", NULL);
-					//for(;;);
+				if(fork() == 0){ // código específico de cada filho
+					printf("Hello, I'm the child number %d, my PID is %d and my father's PID is %d\n",i+1,getpid(),getppid());
+					//execl("/usr/bin/firefox", "firefox", NULL);
+					//signal(SIGTSTP, trata_SIGTSTP);
+					exit(0); // encerra o filho
 				}
 			}
 		}
-		// execução do processo gerente
-		wait();
+		// o processo gerente faz n wait() para os n filhos
+		for(i = 0; i < n; i++)
+			wait();
 	}
 }
 
@@ -75,12 +82,15 @@ int main(void){
 
 	while(1){
 		printf("fsh> ");
+
+		// se houver erro na captura da linha digitada
 		if (!fgets(line, SIZE_IN, stdin))
 			exit(1);
 
+		// faz cópia da entrada do usuário
 		strcpy(command,line);
 
-	    // Parse and execute command
+	    // interpreta os comandos, primeiro verificando os comandos básicos
 	    if ((cmd = strtok(line, DELIMS))) {
 
 			if (strcmp(cmd, "cd") == 0) {
@@ -92,7 +102,9 @@ int main(void){
 		   	} else if (strcmp(cmd, "exit") == 0) {
 		    	exit_command();
 		   	} else {
-		   		exec_children(5);
+		   		// caso dos executáveis separados por '@'
+		   		//exec_children(1,"dfdf");
+		   		printf("Sou uma shell burra, ainda não sei executar programas\n");
 		   	}
 	    }
 
