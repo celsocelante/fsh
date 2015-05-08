@@ -90,7 +90,7 @@ void exec_children(int n, char** comandos){
 					//signal(SIGTSTP, trata_SIGTSTP);
 					
 					}*/
-					printf("%s\n", comandos[i]); //////////////////////////////////////////////////////////////////////////////// CRIAR STRING PRA COPIAR COMANDOS E TRABALHAR EM CIMA DELA
+					printf("%s\n", comandos[i]);
 					exit(0); // encerra o filho
 				}
 			}
