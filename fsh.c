@@ -53,7 +53,8 @@ char *trimwhitespace(char *str)
   char *end;
 
   // Trim leading space
-  while(isspace(*str)) str++;
+  while(isspace(*str))
+	str++;
 
   if(*str == 0)  // All spaces?
     return str;
@@ -75,28 +76,38 @@ void exec_children(int n, char** comandos){
 	int pid = fork(); // cria processo gerente
 
 	if(pid == 0){ // no caso do gerente
+		setsid(); // o processo gerente vai para background
 		pid_manager = getpid();
 		
 		for(i = 0; i < n; i++){ // iteração para criar n filhos
 			if(getpid() == pid_manager){
-				if(fork() == 0){ // código específico de cada filh
+				if(fork() == 0){ // código específico de cada filho
+
+					char* command; // string para manter o comando completo recebido
+					//char [6][256]; // vetor de strings para manter todos os argumentos
+					char* cmd;
+
 					printf("Hello, I'm the child number %d, my PID is %d and my father's PID is %d\n",i+1,getpid(),getppid());
-					/*cmd = strtok (comandos[i]," ");
-					while (cmd != NULL)
-					{
-						printf ("%s\n",comandos[i]);
-						cmd = strtok (NULL, " ");				
-					//execl("/usr/bin/firefox", "firefox", NULL);
-					//signal(SIGTSTP, trata_SIGTSTP);
+
+					command = (char *) malloc(strlen(comandos[i])+1);
+					command = strdup(comandos[i]); // copia o comando completo recebido
 					
-					}*/
-					printf("%s\n", comandos[i]); //////////////////////////////////////////////////////////////////////////////// CRIAR STRING PRA COPIAR COMANDOS E TRABALHAR EM CIMA DELA
+					cmd = strtok (command," ");
+					while (cmd != NULL){
+						
+						printf ("%s\n",command);
+						cmd = strtok (NULL, " ");
+						
+					}
+
 					exit(0); // encerra o filho
+
+					// usar int execvp(const char *file, char *const argv[]);
 				}
 			}
 		}
 		// o processo gerente faz n wait() para os n filhos
-		for(i = 0; i < n; i++)
+		for(i=0; i<n; i++) 		
 			wait();
 		exit(0);
 	}
@@ -145,7 +156,7 @@ int main(void){
 						
 					}
 
-					printf("%d\n",count);
+					printf("%d argumentos\n",count);
 		   		// caso dos executáveis separados por '@'
 		   		exec_children(count,proc);
 		   	}
