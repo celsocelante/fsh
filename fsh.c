@@ -7,6 +7,7 @@
 
 // Número máximo de programas divididos por '@'
 #define MAX_WORDS 10
+#define MAX_ARGS 5
 // Tamanho máximo da linha a ser lida na shell
 #define SIZE_IN 1024
 #define DELIMS " \t\r\n"
@@ -39,8 +40,15 @@ void pwd_command(void){
 }
 
 // Função responsável pelo comando 'waita'
-void waita_command(void){
-	// faz nada
+void waitz_command(void){
+	int pid;
+
+	while(pid = waitpid(-1, NULL, 0)){
+		if (errno == ECHILD)
+      	break;
+		printf("Morreu um zumbi!\n");
+	
+	}
 }
 
 // Função responsável pelo comando 'exit'
@@ -77,6 +85,7 @@ void exec_children(int n, char** comandos){
 
 	if(pid == 0){ // no caso do gerente
 		setsid(); // o processo gerente vai para background
+		signal(SIGTSTP,trata_SIGTSTP);
 		pid_manager = getpid();
 		
 		for(i = 0; i < n; i++){ // iteração para criar n filhos
@@ -84,31 +93,34 @@ void exec_children(int n, char** comandos){
 				if(fork() == 0){ // código específico de cada filho
 
 					char* command; // string para manter o comando completo recebido
-					//char [6][256]; // vetor de strings para manter todos os argumentos
 					char* cmd;
 
-					printf("Hello, I'm the child number %d, my PID is %d and my father's PID is %d\n",i+1,getpid(),getppid());
+					//printf("Hello, I'm the child number %d, my PID is %d and my father's PID is %d\n",i+1,getpid(),getppid());
 
-					command = (char *) malloc(strlen(comandos[i])+1);
-					command = strdup(comandos[i]); // copia o comando completo recebido
+					//command = (char *) malloc(strlen(comandos[i])+1);
+					command = strdup(comandos[i]); // copia o comando completo recebido. PODE VAZAR MEMÓRIA! VERIFICAR!
+					char* arg[MAX_ARGS + 1];
+					int cont = 0;
 					
 					cmd = strtok (command," ");
 					while (cmd != NULL){
-						
-						printf ("%s\n",command);
+						arg[cont] = cmd;
+						cont++;
 						cmd = strtok (NULL, " ");
 						
 					}
+					arg[cont] = NULL;
 
-					exit(0); // encerra o filho
-
-					// usar int execvp(const char *file, char *const argv[]);
+					execvp(arg[0], arg);
 				}
 			}
+		}	
+		pid = waitpid(-1, NULL, 0); // o processo gerente espera o retorno de ao menos um filho
+		if(pid > 0){
+			killpg(0, SIGINT); // mata todos os filhos caso um deles morra
+			exit(0);
 		}
-		// o processo gerente faz n wait() para os n filhos
-		for(i=0; i<n; i++) 		
-			wait();
+
 		exit(0);
 	}
 }
@@ -138,25 +150,24 @@ int main(void){
 				cd_command();
 			} else if(strcmp(cmd,"pwd") == 0){
 		   		pwd_command();
-		   	} else if(strcmp(cmd,"waita") == 0){
-		   		waita_command();
+		   	} else if(strcmp(cmd,"waitz") == 0){
+		   		waitz_command();
 		   	} else if (strcmp(cmd, "exit") == 0) {
 		    	exit_command();
 		   	} else {
 					cmd = strtok (command,"@");
-					while (cmd != NULL)
-					{
+					while (cmd != NULL) {
 						cmd = trimwhitespace(cmd);
-						proc[count] = (char*) malloc(strlen(cmd)+1);
+						proc[count] = (char*) malloc(strlen(cmd)+1);//FREE!!!!!!!!!!!!!
 						strcpy(proc[count],cmd);
-						printf ("%s\n",proc[count]);
 						count++;
 						cmd = strtok (NULL, "@");
-// lembrar de parar o while na decima iteracao para evitar invadir espaco de memoria
+						
+						if(count >= MAX_WORDS){
+							break;
+						}
 						
 					}
-
-					printf("%d argumentos\n",count);
 		   		// caso dos executáveis separados por '@'
 		   		exec_children(count,proc);
 		   	}

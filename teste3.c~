@@ -6,7 +6,7 @@
 #include <signal.h>
 
 int main(void){
-					execl (" /bin/ping", "google.com ", NULL);
+					execl ("/bin/ping", "google.com", NULL);
 					//break;
 					//exit(0);
 }
