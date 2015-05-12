@@ -13,8 +13,15 @@
 #define DELIMS " \t\r\n"
 #define DELIM_F " @ "
 
-// Função que trata o sinal TSTP
+// Função que trata o sinal SIGTSTP de cada filho
 void trata_SIGTSTP(int signal){
+	printf("Nao adianta tentar suspender... minha familia de processos esta protegida!\n");
+	kill(getppid(),SIGUSR1);
+}
+
+/* quando há tentativa de bloquear um filho, o mesmo envia SIGUSR1 para o pai, 
+que deve tratar esse sinal exibindo uma mensagem "Não adianta..." */
+void trata_SIGUSR1(int signal){
 	printf("Nao adianta tentar suspender... minha familia de processos esta protegida!\n");
 }
 
@@ -23,11 +30,11 @@ void cd_command(void){
 
 	char *arg = strtok(NULL, DELIMS);
 	if (!arg)
-		printf("cd: Argument is required\n");
+		printf("cd: Argumento obrigatorio\n");
 
 	else 
 		if (chdir(arg))
-			printf("cd: The directory \"%s\" does not exist\n",arg);
+			printf("cd: O diretorio \"%s\" nao existe\n",arg);
 }
 
 // Função responsável pelo comando 'pwd'
@@ -36,23 +43,20 @@ void pwd_command(void){
    	if (getcwd(cwd, sizeof(cwd)) != NULL)
     	printf("pwd: %s\n", cwd);
 	else
-    	printf("pwd: Cannot get current directory\n");
+    	printf("pwd: Nao foi possivel obter o diretorio atual\n");
 }
 
 // Função responsável pelo comando 'waita'
 void waitz_command(void){
-	int pid;
-
-	while(pid = waitpid(-1, NULL, 0)){
-		if (errno == ECHILD)
-      	break;
+	while(waitpid(-1, NULL, WNOHANG) > 0)
 		printf("Morreu um zumbi!\n");
-	
-	}
 }
 
 // Função responsável pelo comando 'exit'
 void exit_command(void){
+	// mata todos os filhos e encerra a execução
+	while(waitpid(-1, NULL, WNOHANG) > 0);
+	kill(0, SIGINT);
 	exit(0);
 }
 
@@ -84,13 +88,18 @@ void exec_children(int n, char** comandos){
 	int pid = fork(); // cria processo gerente
 
 	if(pid == 0){ // no caso do gerente
+		signal(SIGINT, SIG_DFL);
 		setsid(); // o processo gerente vai para background
-		signal(SIGTSTP,trata_SIGTSTP);
+
+		// caso um filho receba sinal de bloqueio, o mesmo envia SIGUSR1 para o pai
+		signal(SIGUSR1,trata_SIGUSR1);
+
 		pid_manager = getpid();
 		
 		for(i = 0; i < n; i++){ // iteração para criar n filhos
 			if(getpid() == pid_manager){
 				if(fork() == 0){ // código específico de cada filho
+					signal(SIGTSTP,trata_SIGTSTP);
 
 					char* command; // string para manter o comando completo recebido
 					char* cmd;
@@ -112,20 +121,27 @@ void exec_children(int n, char** comandos){
 					arg[cont] = NULL;
 
 					execvp(arg[0], arg);
+
+					// suspende o processo em caso de erro
+					printf("Erro de execucao\n");
+					
+					exit(0);
+					//pause();
 				}
 			}
-		}	
-		pid = waitpid(-1, NULL, 0); // o processo gerente espera o retorno de ao menos um filho
-		if(pid > 0){
-			killpg(0, SIGINT); // mata todos os filhos caso um deles morra
-			exit(0);
 		}
+		// código responsável por matar todos os filhos caso ao menos um seja encerrado
+		pid = waitpid(-1, NULL, 0); // o processo gerente espera o retorno de ao menos um filho
+		
+		if(pid > 0)
+			killpg(0, SIGINT); // mata todos os filhos caso um deles morra
 
 		exit(0);
 	}
 }
 
 int main(void){
+	signal(SIGINT, SIG_IGN);
 	int count = 0, i;
 
 	char *cmd;
@@ -170,9 +186,13 @@ int main(void){
 					}
 		   		// caso dos executáveis separados por '@'
 		   		exec_children(count,proc);
+		   		
 		   	}
 	    }
 		count = 0;
+		/* espera certo tempo para pedir entrada de novo
+		isso evita sobreposição de "fsh> " */
+		usleep(5000);
 
 	}
 	return 0;
