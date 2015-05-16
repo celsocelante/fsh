@@ -1,20 +1,26 @@
-#include <stdio.h>
-
 typedef struct proc {
 	int pid;
 	struct proc* prox;
-} Proc;
+} Lista;
 
-Proc* criaProc(){
+Lista* lst_cria(void){
 	return NULL;
 }
 
-Proc* addProc(int pid, Proc* lista){
-	Proc* item;
-	item = (Proc*) malloc(sizeof(Proc));
-	item->pid = pid;
-	item->prox = lista;
+Lista* lst_insere(int pid, Lista* lista){
+	Lista* novo = (Lista*) malloc(sizeof(Lista));
+	novo->pid = pid;
+	novo->prox = lista;
 
-	return item;
+	return novo;
+}
+
+void lst_libera(Lista* lista){
+	Lista* p = lista;
+	while(p != NULL){
+		Lista* t = p->prox;
+		free(p);
+		p = t;
+	}
 }
 
