@@ -1,3 +1,11 @@
+/* 
+Grupo: Celso Ademar Celante Junior
+	   Igor Pereira
+
+Disciplina: Sistemas Operacionais
+Ano/período: 2015/1
+*/
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,6 +21,9 @@
 
 // Tamanho máximo da linha a ser lida na shell
 #define SIZE_IN 1024
+
+// Tamanho máximo de cada comando
+#define SIZE_CMD 100
 
 // Delimitadores do strtok
 #define DELIMS " \t\r\n"
@@ -161,7 +172,7 @@ char* trimstring(char* str){
 }
 
 // Função que cria n filhos e um processo gerente
-void exec_children(int n, char comandos[10][512]){
+void exec_children(int n, char comandos[MAX_WORDS][SIZE_CMD]){
 	int i, pid_manager;
 	char* cmd;
 	int pid = fork(); // cria processo gerente
@@ -169,7 +180,7 @@ void exec_children(int n, char comandos[10][512]){
 	// Caso o fork() dê erro...
 	if(pid < 0){
 		printf("Problema no fork! Encerrando...\n");
-		exit_command();
+		exit(1);
 	}
 
 	if(pid > 0){
@@ -200,7 +211,7 @@ void exec_children(int n, char comandos[10][512]){
 				// Caso o fork() dê erro...
 				if(pid < 0){
 					printf("Problema no fork()! Encerrando...\n");
-					exit_command();
+					exit(1);
 				}
 
 				if(pid == 0){ // código específico de cada filho
@@ -253,16 +264,20 @@ void exec_children(int n, char comandos[10][512]){
 }
 
 int main(void){
+	// Contadores
 	int count = 0, i;
 
 	// Ponteiro para o strtok
 	char *cmd;
+
 	// Linha de comandos inserida pelo usuário
   	char line[SIZE_IN];
+
   	// Cópia da linha de comandos inseria pelo usuário (evita problemas do strtok)
   	char command[SIZE_IN];
+
   	// Vetor de comandos
-	char proc[10][512];
+	char proc[MAX_WORDS][SIZE_CMD];
 
 	// Cria lista de processos gerentes
 	lista_gerentes = lst_cria();
