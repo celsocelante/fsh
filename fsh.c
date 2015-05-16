@@ -4,17 +4,55 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
-#include "lista.h"
 
 // Número máximo de programas divididos por '@'
 #define MAX_WORDS 10
+
 // Número máximo de argumentos por programa
 #define MAX_ARGS 5
+
 // Tamanho máximo da linha a ser lida na shell
 #define SIZE_IN 1024
+
+// Delimitadores do strtok
 #define DELIMS " \t\r\n"
 #define DELIM_COMANDOS "@"
+
+// A ser usada junto a função waitpid()
 #define WAIT_ANY -1
+
+// Para a função exit_command, que permite encerramento seguro, seja reconhecida por todos
+void exit_command(void);
+
+// Estrutura dos nós da lista encadeada
+typedef struct proc {
+	int pid;
+	struct proc* prox;
+} Lista;
+
+// Função de criação da lista encadeada
+Lista* lst_cria(void){
+	return NULL;
+}
+
+// Função de inserção na lista encadeada
+Lista* lst_insere(int pid, Lista* lista){
+	Lista* novo = (Lista*) malloc(sizeof(Lista));
+	novo->pid = pid;
+	novo->prox = lista;
+
+	return novo;
+}
+
+// Função que libera a lista encadeada da memória
+void lst_libera(Lista* lista){
+	Lista* p = lista;
+	while(p != NULL){
+		Lista* t = p->prox;
+		free(p);
+		p = t;
+	}
+}
 
 // Variável global que conta os processos gerentes vivos
 int qtd_gerentes = 0;
@@ -27,6 +65,7 @@ void trata_SIGTSTP_gerente(int signal){
 	printf("Nao adianta tentar suspender... minha familia de processos esta protegida!\n");
 }
 
+// Trata o sinal que o processo gerente recebo da fsh para encerrar todos os seus filhos
 void trata_SIGUSR1_gerente(int sig){
 	killpg(0, SIGKILL);
 }
@@ -41,26 +80,26 @@ void trata_SIGTSTP_fsh(int signal){
 }
 
 // Tratamento do signal SIGINT, que somente aceita caso a fsh nao tenha nenhum filho
-void trata_SIGINT(int sig){
+void trata_SIGINT_fsh(int sig){
 	// Verifica a quantidade de processos gerentes vivos
     if(qtd_gerentes == 0){
-    	signal(SIGINT, SIG_DFL);
-        raise(SIGINT);
+    	/*signal(SIGINT, SIG_DFL);
+        raise(SIGINT);*/
+        exit_command();
     }
 }
 
 // Decrementa o contador de processos gerentes vivos
-void trata_SIGCHLD(int signal){
+void trata_SIGCHLD_fsh(int signal){
 	qtd_gerentes = qtd_gerentes - 1;
 }
 
 // Função responsável pelo comando 'cd'
 void cd_command(void){
-	char *arg = strtok(NULL, DELIMS);
+	char* arg = strtok(NULL, DELIMS);
 	if (!arg)
 		printf("cd: Argumento obrigatorio\n");
-	else 
-		if (chdir(arg))
+	else if (chdir(arg))
 			printf("cd: O diretorio \"%s\" nao existe\n",arg);
 }
 
@@ -75,8 +114,9 @@ void pwd_command(void){
 
 // Função responsável pelo comando 'waitz'
 void waitz_command(void){
-	while(waitpid(WAIT_ANY, NULL, WNOHANG) > 0)
-		printf("Morreu um zumbi!\n");
+	int pid = 0;
+	while((pid = waitpid(WAIT_ANY, NULL, WNOHANG)) > 0)
+		printf("Processo zumbi com PID %d liberado!\n",pid);
 }
 
 // Função responsável pelo comando 'exit'
@@ -88,37 +128,49 @@ void exit_command(void){
         kill(p->pid, SIGUSR1);
 	}
 
+	// Libera a lista de gerentes global
+	lst_libera(lista_gerentes);
+
 	// Libera todos os filhos zumbis
 	while(waitpid(WAIT_ANY, NULL, WNOHANG) > 0);
 
-	lst_libera(lista_gerentes);
+	// Finalmente encerra a fsh
 	exit(0);
 }
 
-char *trimwhitespace(char *str){
-  char *end;
-  // Trim leading space
-  while(isspace(*str))
-	str++;
+char* trimstring(char* str){
+	char* fim;
+	// Remove os espaços iniciais
+	while(isspace(*str))
+		str++;
 
-  if(*str == 0)  // All spaces?
-    return str;
+	// Se a string for vazia, retornar a própria
+	if(*str == 0)
+		return str;
 
-  // Trim trailing space
-  end = str + strlen(str) - 1;
-  while(end > str && isspace(*end)) end--;
+	// Trim trailing space
+	fim = str + strlen(str) - 1;
 
-  // Write new null terminator
-  *(end+1) = 0;
+	while(fim > str && isspace(*fim))
+		fim--;
 
-  return str;
+	// Insere o terminal nulo da string no fim
+	*(fim+1) = '\0';
+
+	return str;
 }
 
-// Função experimental que cria n filhos e um processo gerente
-void exec_children(int n, char** comandos){
+// Função que cria n filhos e um processo gerente
+void exec_children(int n, char comandos[10][512]){
 	int i, pid_manager;
 	char* cmd;
 	int pid = fork(); // cria processo gerente
+
+	// Caso o fork() dê erro...
+	if(pid < 0){
+		printf("Problema no fork! Encerrando...\n");
+		exit_command();
+	}
 
 	if(pid > 0){
 		// adiciona pid do processo gerente a lista de pids (filhos da fsh)
@@ -143,12 +195,20 @@ void exec_children(int n, char** comandos){
 		
 		for(i = 0; i < n; i++){ // iteração para criar n filhos
 			if(getpid() == pid_manager){
-				if(fork() == 0){ // código específico de cada filho
-					char* command; // string para manter o comando completo recebido
+				int pid = fork();
+
+				// Caso o fork() dê erro...
+				if(pid < 0){
+					printf("Problema no fork()! Encerrando...\n");
+					exit_command();
+				}
+
+				if(pid == 0){ // código específico de cada filho
+					char command[512]; // string para manter o comando completo recebido
 					char* cmd;
 
 					//command = (char *) malloc(strlen(comandos[i])+1);
-					command = strdup(comandos[i]); // copia o comando completo recebido. PODE VAZAR MEMÓRIA! VERIFICAR!
+					strcpy(command,comandos[i]); // copia o comando completo recebido. PODE VAZAR MEMÓRIA! VERIFICAR!
 					char* arg[MAX_ARGS + 1];
 
 					// contador de argumentos
@@ -174,37 +234,43 @@ void exec_children(int n, char** comandos){
 					// substitui o código do executável
 					execvp(arg[0], arg);
 
-					printf("Erro de execucao\n");
+					printf("Erro de execucao. Minha familia sera morta!\n");
 					
 					// Encerra o processo em caso de erro
-					exit_command();
+					exit(0);
 				}
 			}
 		}
-		// Responsável por matar todos os filhos caso ao menos um seja encerrado
+		/* Resto do código do processo gerente
+		   Responsável por matar todos os filhos caso ao menos um seja encerrado */
+
 		if(waitpid(WAIT_ANY, NULL, 0) > 0)
 			// envia SIGKILL a todos do grupo
 			killpg(0, SIGKILL);
 
-		exit_command();
+		exit(0);
 	}
 }
 
 int main(void){
 	int count = 0, i;
 
+	// Ponteiro para o strtok
 	char *cmd;
+	// Linha de comandos inserida pelo usuário
   	char line[SIZE_IN];
+  	// Cópia da linha de comandos inseria pelo usuário (evita problemas do strtok)
   	char command[SIZE_IN];
-	char *proc[10];
+  	// Vetor de comandos
+	char proc[10][512];
 
 	// Cria lista de processos gerentes
 	lista_gerentes = lst_cria();
 
 	// Tratadores de sinais da fsh
 	signal(SIGTSTP, trata_SIGTSTP_fsh);
-	signal(SIGCHLD, trata_SIGCHLD);
-	signal(SIGINT, trata_SIGINT);
+	signal(SIGCHLD, trata_SIGCHLD_fsh);
+	signal(SIGINT, trata_SIGINT_fsh);
 
 	while(1){
 		printf("fsh> ");
@@ -223,19 +289,25 @@ int main(void){
 				cd_command();
 			} else if(strcmp(cmd,"pwd") == 0){
 		   		pwd_command();
+		   	// A especificação está confusa, não dá para saber qual é o nome do comando
 		   	} else if(strcmp(cmd,"waitz") == 0 || strcmp(cmd,"waita") == 0){
 		   		waitz_command();
 		   	} else if (strcmp(cmd, "exit") == 0) {
 		    	exit_command();
 		   	} else {
+		   			// "Quebra" a string por delimitador "@"
 					cmd = strtok (command, DELIM_COMANDOS);
 					while (cmd != NULL) {
-						cmd = trimwhitespace(cmd);
-						proc[count] = (char*) malloc(strlen(cmd)+1);//FREE!!!!!!!!!!!!!
+						// Remove o espaço em excesso das extremidades
+						cmd = trimstring(cmd);
+
+						// Preenche o vetor de comandos executáveis com cada exec. e seus args
 						strcpy(proc[count],cmd);
+
 						count++;
 						cmd = strtok (NULL, DELIM_COMANDOS);
 						
+						// Garante que só 10 comandos, no máximo, serão lidos
 						if(count >= MAX_WORDS){
 							break;
 						}
@@ -247,13 +319,15 @@ int main(void){
 		   	}
 	    }
 
-	    // Reinicia o contador de executáveis
+	    // Reinicia o contador de comandos executáveis
 		count = 0;
+
 		/* espera certo tempo para pedir entrada de novo
 		isso evita sobreposição de "fsh> " */
-		usleep(5000);
+		usleep(6000);
 
 	}
+	// Encerra a fsh, liberando filhos e recursos
 	exit_command();
 	return 0;
 }
