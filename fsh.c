@@ -94,9 +94,9 @@ void trata_SIGTSTP_fsh(int signal){
 void trata_SIGINT_fsh(int sig){
 	// Verifica a quantidade de processos gerentes vivos
     if(qtd_gerentes == 0){
-    	/*signal(SIGINT, SIG_DFL);
-        raise(SIGINT);*/
-        exit_command();
+    	signal(SIGINT, SIG_DFL);
+        raise(SIGINT);
+        //exit_command(); // seria mais seguro, pois liberaria memória do monte
     }
 }
 
@@ -134,7 +134,7 @@ void waitz_command(void){
 void exit_command(void){
 	Lista* p;
 
-	// Envia comando de encerramento para todos os gerentes, que tratam e matam seus filhos
+	// Envia comando de encerramento (no caso, SIGURS1) para todos os gerentes, que tratam e matam seus filhos
 	for(p = lista_gerentes; p != NULL; p = p->prox){
         kill(p->pid, SIGUSR1);
 	}
@@ -142,7 +142,7 @@ void exit_command(void){
 	// Libera a lista de gerentes global
 	lst_libera(lista_gerentes);
 
-	// Libera todos os filhos zumbis
+	// Libera todos os filhos zumbis, assim como o waitz(a)
 	while(waitpid(WAIT_ANY, NULL, WNOHANG) > 0);
 
 	// Finalmente encerra a fsh
@@ -215,11 +215,10 @@ void exec_children(int n, char comandos[MAX_WORDS][SIZE_CMD]){
 				}
 
 				if(pid == 0){ // código específico de cada filho
-					char command[512]; // string para manter o comando completo recebido
+					char command[SIZE_CMD]; // string para manter o comando completo recebido
 					char* cmd;
 
-					//command = (char *) malloc(strlen(comandos[i])+1);
-					strcpy(command,comandos[i]); // copia o comando completo recebido. PODE VAZAR MEMÓRIA! VERIFICAR!
+					strcpy(command,comandos[i]); // copia o comando completo recebido
 					char* arg[MAX_ARGS + 1];
 
 					// contador de argumentos
@@ -236,11 +235,8 @@ void exec_children(int n, char comandos[MAX_WORDS][SIZE_CMD]){
 					// Seta NULL para último argumento + 1
 					arg[cont] = NULL;
 
-					// Bloqueando sinal SIGTSTP
-					sigset_t mascara;
-					sigemptyset(&mascara);
-					sigaddset(&mascara, SIGTSTP);
-					sigprocmask(SIG_BLOCK, &mascara, NULL);
+					// Ignora o sinal SIGTSTP
+					signal(SIGTSTP, SIG_IGN);
 
 					// substitui o código do executável
 					execvp(arg[0], arg);
@@ -283,9 +279,9 @@ int main(void){
 	lista_gerentes = lst_cria();
 
 	// Tratadores de sinais da fsh
-	signal(SIGTSTP, trata_SIGTSTP_fsh);
-	signal(SIGCHLD, trata_SIGCHLD_fsh);
-	signal(SIGINT, trata_SIGINT_fsh);
+	signal(SIGTSTP, trata_SIGTSTP_fsh); // repassa o CTRL+Z para os processos gerentes
+	signal(SIGCHLD, trata_SIGCHLD_fsh); // decrementa o contador de filhos/gerentes vivos
+	signal(SIGINT, trata_SIGINT_fsh); // determina se aceita ou não o CTRL+C
 
 	while(1){
 		printf("fsh> ");
@@ -304,7 +300,7 @@ int main(void){
 				cd_command();
 			} else if(strcmp(cmd,"pwd") == 0){
 		   		pwd_command();
-		   	// A especificação está confusa, não dá para saber qual é o nome do comando
+		   	// A especificação está confusa, não dá para saber qual é o nome do comando, então a fsh aceita ambos
 		   	} else if(strcmp(cmd,"waitz") == 0 || strcmp(cmd,"waita") == 0){
 		   		waitz_command();
 		   	} else if (strcmp(cmd, "exit") == 0) {
@@ -344,5 +340,4 @@ int main(void){
 	}
 	// Encerra a fsh, liberando filhos e recursos
 	exit_command();
-	return 0;
 }
