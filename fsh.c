@@ -1,6 +1,6 @@
 /* 
 Grupo: Celso Ademar Celante Junior
-	   Igor Pereira
+	   Igor Silva Epitácio Pereira
 
 Disciplina: Sistemas Operacionais
 Ano/período: 2015/1
@@ -159,7 +159,7 @@ char* trimstring(char* str){
 	if(*str == 0)
 		return str;
 
-	// Trim trailing space
+	// Corta espaços inúteis 
 	fim = str + strlen(str) - 1;
 
 	while(fim > str && isspace(*fim))
